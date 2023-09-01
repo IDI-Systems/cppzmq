@@ -35,6 +35,18 @@
 // included here for _HAS_CXX* macros
 #include <zmq.h>
 
+#ifdef CPPZMQ_NO_CPP_EXCEPTIONS
+#define THROW_ERROR_T std::abort()
+#define THROW_RETURN(v) return v
+#define NO_THROW_RETURN_TYPE(t) t
+#define NO_THROW_RETURN(v) return v
+#else
+#define THROW_ERROR_T throw error_t()
+#define THROW_RETURN(v) throw error_t()
+#define NO_THROW_RETURN_TYPE(t) void
+#define NO_THROW_RETURN(v)
+#endif
+
 #if defined(_MSVC_LANG)
 #define CPPZMQ_LANG _MSVC_LANG
 #else
@@ -250,8 +262,8 @@ template<class Iter>
 using iter_value_t = typename std::iterator_traits<Iter>::value_type;
 
 template<class Range>
-using range_iter_t = decltype(
-  ranges::begin(std::declval<typename std::remove_reference<Range>::type &>()));
+using range_iter_t = decltype(ranges::begin(
+  std::declval<typename std::remove_reference<Range>::type &>()));
 
 template<class Range> using range_value_t = iter_value_t<range_iter_t<Range>>;
 
@@ -262,9 +274,10 @@ template<class T, class = void> struct is_range : std::false_type
 template<class T>
 struct is_range<
   T,
-  void_t<decltype(
-    ranges::begin(std::declval<typename std::remove_reference<T>::type &>())
-    == ranges::end(std::declval<typename std::remove_reference<T>::type &>()))>>
+  void_t<decltype(ranges::begin(
+                    std::declval<typename std::remove_reference<T>::type &>())
+                  == ranges::end(
+                    std::declval<typename std::remove_reference<T>::type &>()))>>
     : std::true_type
 {
 };
@@ -301,12 +314,13 @@ class error_t : public std::exception
     int errnum;
 };
 
-namespace detail {
+namespace detail
+{
 inline int poll(zmq_pollitem_t *items_, size_t nitems_, long timeout_)
 {
     int rc = zmq_poll(items_, static_cast<int>(nitems_), timeout_);
     if (rc < 0)
-        throw error_t();
+        THROW_RETURN(rc);
     return rc;
 }
 }
@@ -333,7 +347,7 @@ inline int
 poll(zmq_pollitem_t const *items, size_t nitems, std::chrono::milliseconds timeout)
 {
     return detail::poll(const_cast<zmq_pollitem_t *>(items), nitems,
-                static_cast<long>(timeout.count()));
+                        static_cast<long>(timeout.count()));
 }
 
 ZMQ_DEPRECATED("from 4.3.1, use poll taking non-const items")
@@ -341,17 +355,19 @@ inline int poll(std::vector<zmq_pollitem_t> const &items,
                 std::chrono::milliseconds timeout)
 {
     return detail::poll(const_cast<zmq_pollitem_t *>(items.data()), items.size(),
-                static_cast<long>(timeout.count()));
+                        static_cast<long>(timeout.count()));
 }
 
 ZMQ_DEPRECATED("from 4.3.1, use poll taking non-const items")
 inline int poll(std::vector<zmq_pollitem_t> const &items, long timeout_ = -1)
 {
-    return detail::poll(const_cast<zmq_pollitem_t *>(items.data()), items.size(), timeout_);
+    return detail::poll(const_cast<zmq_pollitem_t *>(items.data()), items.size(),
+                        timeout_);
 }
 
-inline int
-poll(zmq_pollitem_t *items, size_t nitems, std::chrono::milliseconds timeout = std::chrono::milliseconds{-1})
+inline int poll(zmq_pollitem_t *items,
+                size_t nitems,
+                std::chrono::milliseconds timeout = std::chrono::milliseconds{-1})
 {
     return detail::poll(items, nitems, static_cast<long>(timeout.count()));
 }
@@ -359,7 +375,8 @@ poll(zmq_pollitem_t *items, size_t nitems, std::chrono::milliseconds timeout = s
 inline int poll(std::vector<zmq_pollitem_t> &items,
                 std::chrono::milliseconds timeout = std::chrono::milliseconds{-1})
 {
-    return detail::poll(items.data(), items.size(), static_cast<long>(timeout.count()));
+    return detail::poll(items.data(), items.size(),
+                        static_cast<long>(timeout.count()));
 }
 
 ZMQ_DEPRECATED("from 4.3.1, use poll taking std::chrono::duration instead of long")
@@ -372,7 +389,8 @@ template<std::size_t SIZE>
 inline int poll(std::array<zmq_pollitem_t, SIZE> &items,
                 std::chrono::milliseconds timeout = std::chrono::milliseconds{-1})
 {
-    return detail::poll(items.data(), items.size(), static_cast<long>(timeout.count()));
+    return detail::poll(items.data(), items.size(),
+                        static_cast<long>(timeout.count()));
 }
 #endif
 
@@ -418,7 +436,7 @@ class message_t
     {
         int rc = zmq_msg_init_size(&msg, size_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     template<class ForwardIter> message_t(ForwardIter first, ForwardIter last)
@@ -430,7 +448,7 @@ class message_t
           static_cast<size_t>(std::distance(first, last)) * sizeof(value_t);
         int const rc = zmq_msg_init_size(&msg, size_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         std::copy(first, last, data<value_t>());
     }
 
@@ -438,7 +456,7 @@ class message_t
     {
         int rc = zmq_msg_init_size(&msg, size_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         if (size_) {
             // this constructor allows (nullptr, 0),
             // memcpy with a null pointer is UB
@@ -450,7 +468,7 @@ class message_t
     {
         int rc = zmq_msg_init_data(&msg, data_, size_, ffn_, hint_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     // overload set of string-like types and generic containers
@@ -513,7 +531,7 @@ class message_t
     {
         int rc = zmq_msg_close(&msg);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         rc = zmq_msg_init(&msg);
         ZMQ_ASSERT(rc == 0);
     }
@@ -522,23 +540,23 @@ class message_t
     {
         int rc = zmq_msg_close(&msg);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         rc = zmq_msg_init_size(&msg, size_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     void rebuild(const void *data_, size_t size_)
     {
         int rc = zmq_msg_close(&msg);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         rc = zmq_msg_init_size(&msg, size_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         memcpy(data(), data_, size_);
     }
-    
+
     void rebuild(const std::string &str)
     {
         rebuild(str.data(), str.size());
@@ -548,10 +566,10 @@ class message_t
     {
         int rc = zmq_msg_close(&msg);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
         rc = zmq_msg_init_data(&msg, data_, size_, ffn_, hint_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     ZMQ_DEPRECATED("from 4.3.1, use move taking non-const reference instead")
@@ -559,14 +577,14 @@ class message_t
     {
         int rc = zmq_msg_move(&msg, const_cast<zmq_msg_t *>(msg_->handle()));
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     void move(message_t &msg_)
     {
         int rc = zmq_msg_move(&msg, msg_.handle());
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     ZMQ_DEPRECATED("from 4.3.1, use copy taking non-const reference instead")
@@ -574,14 +592,14 @@ class message_t
     {
         int rc = zmq_msg_copy(&msg, const_cast<zmq_msg_t *>(msg_->handle()));
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     void copy(message_t &msg_)
     {
         int rc = zmq_msg_copy(&msg, msg_.handle());
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     bool more() const ZMQ_NOTHROW
@@ -630,7 +648,7 @@ class message_t
     {
         int value = zmq_msg_get(&msg, property_);
         if (value == -1)
-            throw error_t();
+            THROW_RETURN(value);
         return value;
     }
 #endif
@@ -640,7 +658,7 @@ class message_t
     {
         const char *value = zmq_msg_gets(&msg, property_);
         if (value == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_RETURN(value);
         return value;
     }
 #endif
@@ -655,7 +673,7 @@ class message_t
     {
         int rc = zmq_msg_set_routing_id(&msg, routing_id);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     const char *group() const
@@ -667,7 +685,7 @@ class message_t
     {
         int rc = zmq_msg_set_group(&msg, group);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 #endif
 
@@ -802,7 +820,7 @@ class context_t
     {
         ptr = zmq_ctx_new();
         if (ptr == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
 
@@ -810,7 +828,7 @@ class context_t
     {
         ptr = zmq_ctx_new();
         if (ptr == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_ERROR_T;
 
         int rc = zmq_ctx_set(ptr, ZMQ_IO_THREADS, io_threads_);
         ZMQ_ASSERT(rc == 0);
@@ -847,7 +865,7 @@ class context_t
     {
         int rc = zmq_ctx_set(ptr, static_cast<int>(option), optval);
         if (rc == -1)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     ZMQ_NODISCARD int get(ctxopt option)
@@ -857,7 +875,7 @@ class context_t
         // which is unfortunate, and may result in errors
         // that don't make sense
         if (rc == -1)
-            throw error_t();
+            THROW_RETURN(rc);
         return rc;
     }
 #endif
@@ -973,13 +991,21 @@ template<class T> class trivial_optional
     T &value()
     {
         if (!_has_value)
+#ifndef CPPZMQ_NO_CPP_EXCEPTIONS
             throw std::exception();
+#else
+            std::abort();
+#endif
         return _value;
     }
     const T &value() const
     {
         if (!_has_value)
+#ifndef CPPZMQ_NO_CPP_EXCEPTIONS
             throw std::exception();
+#else
+            std::abort();
+#endif
         return _value;
     }
 
@@ -1742,7 +1768,7 @@ class socket_base
     {
         int rc = zmq_setsockopt(_handle, option_, optval_, optvallen_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     ZMQ_CPP11_DEPRECATED("from 4.7.0, use `get` taking option from zmq::sockopt")
@@ -1750,7 +1776,7 @@ class socket_base
     {
         int rc = zmq_getsockopt(_handle, option_, optval_, optvallen_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     template<typename T>
@@ -1873,13 +1899,20 @@ class socket_base
     }
 #endif
 
-    void bind(std::string const &addr) { bind(addr.c_str()); }
+    NO_THROW_RETURN_TYPE(bool) bind(std::string const &addr)
+    {
+#ifdef CPPZMQ_NO_CPP_EXCEPTIONS
+        return
+#endif
+          bind(addr.c_str());
+    }
 
-    void bind(const char *addr_)
+    NO_THROW_RETURN_TYPE(bool) bind(const char *addr_)
     {
         int rc = zmq_bind(_handle, addr_);
         if (rc != 0)
-            throw error_t();
+            THROW_RETURN(false);
+        NO_THROW_RETURN(true);
     }
 
     void unbind(std::string const &addr) { unbind(addr.c_str()); }
@@ -1888,16 +1921,23 @@ class socket_base
     {
         int rc = zmq_unbind(_handle, addr_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
-    void connect(std::string const &addr) { connect(addr.c_str()); }
+    NO_THROW_RETURN_TYPE(bool) connect(std::string const &addr)
+    {
+#ifdef CPPZMQ_NO_CPP_EXCEPTIONS
+        return
+#endif
+          connect(addr.c_str());
+    }
 
-    void connect(const char *addr_)
+    NO_THROW_RETURN_TYPE(bool) connect(const char *addr_)
     {
         int rc = zmq_connect(_handle, addr_);
         if (rc != 0)
-            throw error_t();
+            THROW_RETURN(false);
+        NO_THROW_RETURN(true);
     }
 
     void disconnect(std::string const &addr) { disconnect(addr.c_str()); }
@@ -1906,7 +1946,7 @@ class socket_base
     {
         int rc = zmq_disconnect(_handle, addr_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     ZMQ_DEPRECATED("from 4.7.1, use handle() != nullptr or operator bool")
@@ -1920,7 +1960,7 @@ class socket_base
             return static_cast<size_t>(nbytes);
         if (zmq_errno() == EAGAIN)
             return 0;
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     ZMQ_CPP11_DEPRECATED("from 4.3.1, use send taking message_t and send_flags")
@@ -1932,7 +1972,7 @@ class socket_base
             return true;
         if (zmq_errno() == EAGAIN)
             return false;
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     template<typename T>
@@ -1947,7 +1987,7 @@ class socket_base
             return true;
         if (zmq_errno() == EAGAIN)
             return false;
-        throw error_t();
+        THROW_ERROR_T;
     }
 
 #ifdef ZMQ_HAS_RVALUE_REFS
@@ -1972,7 +2012,7 @@ class socket_base
             return static_cast<size_t>(nbytes);
         if (zmq_errno() == EAGAIN)
             return {};
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     send_result_t send(message_t &msg, send_flags flags)
@@ -1982,7 +2022,7 @@ class socket_base
             return static_cast<size_t>(nbytes);
         if (zmq_errno() == EAGAIN)
             return {};
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     send_result_t send(message_t &&msg, send_flags flags)
@@ -2000,7 +2040,7 @@ class socket_base
             return static_cast<size_t>(nbytes);
         if (zmq_errno() == EAGAIN)
             return 0;
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     ZMQ_CPP11_DEPRECATED(
@@ -2012,7 +2052,7 @@ class socket_base
             return true;
         if (zmq_errno() == EAGAIN)
             return false;
-        throw error_t();
+        THROW_ERROR_T;
     }
 
 #ifdef ZMQ_CPP11
@@ -2029,7 +2069,7 @@ class socket_base
         }
         if (zmq_errno() == EAGAIN)
             return {};
-        throw error_t();
+        THROW_ERROR_T;
     }
 
     ZMQ_NODISCARD
@@ -2043,7 +2083,7 @@ class socket_base
         }
         if (zmq_errno() == EAGAIN)
             return {};
-        throw error_t();
+        THROW_ERROR_T;
     }
 #endif
 
@@ -2052,14 +2092,14 @@ class socket_base
     {
         int rc = zmq_join(_handle, group);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     void leave(const char *group)
     {
         int rc = zmq_leave(_handle, group);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 #endif
 
@@ -2079,14 +2119,14 @@ class socket_base
     {
         int rc = zmq_setsockopt(_handle, option_, optval_, optvallen_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     void get_option(int option_, void *optval_, size_t *optvallen_) const
     {
         int rc = zmq_getsockopt(_handle, option_, optval_, optvallen_);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
     }
 };
 } // namespace detail
@@ -2136,27 +2176,33 @@ inline bool operator!=(std::nullptr_t /*p*/, socket_ref sr) ZMQ_NOTHROW
 }
 #endif
 
-inline bool operator==(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator==(const detail::socket_base &a,
+                       const detail::socket_base &b) ZMQ_NOTHROW
 {
     return std::equal_to<const void *>()(a.handle(), b.handle());
 }
-inline bool operator!=(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator!=(const detail::socket_base &a,
+                       const detail::socket_base &b) ZMQ_NOTHROW
 {
     return !(a == b);
 }
-inline bool operator<(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator<(const detail::socket_base &a,
+                      const detail::socket_base &b) ZMQ_NOTHROW
 {
     return std::less<const void *>()(a.handle(), b.handle());
 }
-inline bool operator>(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator>(const detail::socket_base &a,
+                      const detail::socket_base &b) ZMQ_NOTHROW
 {
     return b < a;
 }
-inline bool operator<=(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator<=(const detail::socket_base &a,
+                       const detail::socket_base &b) ZMQ_NOTHROW
 {
     return !(a > b);
 }
-inline bool operator>=(const detail::socket_base& a, const detail::socket_base& b) ZMQ_NOTHROW
+inline bool operator>=(const detail::socket_base &a,
+                       const detail::socket_base &b) ZMQ_NOTHROW
 {
     return !(a < b);
 }
@@ -2190,7 +2236,7 @@ class socket_t : public detail::socket_base
         ctxptr(context_.handle())
     {
         if (_handle == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
 #ifdef ZMQ_CPP11
@@ -2252,9 +2298,9 @@ class socket_t : public detail::socket_base
         detail::socket_base(zmq_socket(context_, type_)), ctxptr(context_)
     {
         if (_handle == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_ERROR_T;
         if (ctxptr == ZMQ_NULLPTR)
-            throw error_t();
+            THROW_ERROR_T;
     }
 };
 
@@ -2268,7 +2314,7 @@ inline void proxy(void *frontend, void *backend, void *capture)
 {
     int rc = zmq_proxy(frontend, backend, capture);
     if (rc != 0)
-        throw error_t();
+        THROW_ERROR_T;
 }
 
 inline void
@@ -2276,7 +2322,7 @@ proxy(socket_ref frontend, socket_ref backend, socket_ref capture = socket_ref()
 {
     int rc = zmq_proxy(frontend.handle(), backend.handle(), capture.handle());
     if (rc != 0)
-        throw error_t();
+        THROW_ERROR_T;
 }
 
 #ifdef ZMQ_HAS_PROXY_STEERABLE
@@ -2286,7 +2332,7 @@ proxy_steerable(void *frontend, void *backend, void *capture, void *control)
 {
     int rc = zmq_proxy_steerable(frontend, backend, capture, control);
     if (rc != 0)
-        throw error_t();
+        THROW_ERROR_T;
 }
 
 inline void proxy_steerable(socket_ref frontend,
@@ -2297,7 +2343,7 @@ inline void proxy_steerable(socket_ref frontend,
     int rc = zmq_proxy_steerable(frontend.handle(), backend.handle(),
                                  capture.handle(), control.handle());
     if (rc != 0)
-        throw error_t();
+        THROW_ERROR_T;
 }
 #endif
 
@@ -2349,7 +2395,7 @@ class monitor_t
     {
         int rc = zmq_socket_monitor(socket.handle(), addr_, events);
         if (rc != 0)
-            throw error_t();
+            THROW_ERROR_T;
 
         _socket = socket;
         _monitor_socket = socket_t(socket.ctxptr, ZMQ_PAIR);
@@ -2368,11 +2414,11 @@ class monitor_t
           {_monitor_socket.handle(), 0, ZMQ_POLLIN, 0},
         };
 
-        #ifdef ZMQ_CPP11
+#ifdef ZMQ_CPP11
         zmq::poll(&items[0], 1, std::chrono::milliseconds(timeout));
-        #else
+#else
         zmq::poll(&items[0], 1, timeout);
-        #endif
+#endif
 
         if (items[0].revents & ZMQ_POLLIN) {
             int rc = zmq_msg_recv(eventMsg.handle(), _monitor_socket.handle(), 0);
@@ -2447,7 +2493,8 @@ class monitor_t
             case ZMQ_EVENT_DISCONNECTED:
                 on_event_disconnected(*event, address.c_str());
                 break;
-#if ZMQ_VERSION >= ZMQ_MAKE_VERSION(4, 3, 0) || (defined(ZMQ_BUILD_DRAFT_API) && ZMQ_VERSION >= ZMQ_MAKE_VERSION(4, 2, 3))
+#if ZMQ_VERSION >= ZMQ_MAKE_VERSION(4, 3, 0)                                        \
+  || (defined(ZMQ_BUILD_DRAFT_API) && ZMQ_VERSION >= ZMQ_MAKE_VERSION(4, 2, 3))
             case ZMQ_EVENT_HANDSHAKE_FAILED_NO_DETAIL:
                 on_event_handshake_failed_no_detail(*event, address.c_str());
                 break;
@@ -2646,7 +2693,7 @@ template<typename T = no_user_data> class poller_t
     poller_t() : poller_ptr(zmq_poller_new())
     {
         if (!poller_ptr)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     template<
@@ -2677,14 +2724,14 @@ template<typename T = no_user_data> class poller_t
     void remove(zmq::socket_ref socket)
     {
         if (0 != zmq_poller_remove(poller_ptr.get(), socket.handle())) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 
     void remove(fd_t fd)
     {
         if (0 != zmq_poller_remove_fd(poller_ptr.get(), fd)) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 
@@ -2693,7 +2740,7 @@ template<typename T = no_user_data> class poller_t
         if (0
             != zmq_poller_modify(poller_ptr.get(), socket.handle(),
                                  static_cast<short>(events))) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 
@@ -2702,7 +2749,7 @@ template<typename T = no_user_data> class poller_t
         if (0
             != zmq_poller_modify_fd(poller_ptr.get(), fd,
                                  static_cast<short>(events))) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 
@@ -2724,7 +2771,7 @@ template<typename T = no_user_data> class poller_t
 #endif
             return 0;
 
-        throw error_t();
+        THROW_ERROR_T;
     }
 
 #if ZMQ_VERSION >= ZMQ_MAKE_VERSION(4, 3, 3)
@@ -2753,7 +2800,7 @@ template<typename T = no_user_data> class poller_t
         if (0
             != zmq_poller_add(poller_ptr.get(), socket.handle(), user_data,
                               static_cast<short>(events))) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 
@@ -2762,7 +2809,7 @@ template<typename T = no_user_data> class poller_t
         if (0
             != zmq_poller_add_fd(poller_ptr.get(), fd, user_data,
                                  static_cast<short>(events))) {
-            throw error_t();
+            THROW_ERROR_T;
         }
     }
 };
