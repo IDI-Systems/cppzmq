@@ -37,11 +37,13 @@
 
 #ifdef CPPZMQ_NO_CPP_EXCEPTIONS
 #define THROW_ERROR_T std::abort()
+#define THROW_ZMQ_ERROR_T std::abort()
 #define THROW_RETURN(v) return v
 #define NO_THROW_RETURN_TYPE(t) t
 #define NO_THROW_RETURN(v) return v
 #else
 #define THROW_ERROR_T throw error_t()
+#define THROW_ZMQ_ERROR_T zmq::error_t()
 #define THROW_RETURN(v) throw error_t()
 #define NO_THROW_RETURN_TYPE(t) void
 #define NO_THROW_RETURN(v)
@@ -2857,7 +2859,7 @@ class timers
     timers() : _timers(zmq_timers_new())
     {
         if (_timers == nullptr)
-            throw error_t();
+            THROW_ERROR_T;
     }
 
     timers(const timers &other) = delete;
@@ -2873,7 +2875,7 @@ class timers
     {
         id_t timer_id = zmq_timers_add(_timers, interval.count(), handler, arg);
         if (timer_id == -1)
-            throw zmq::error_t();
+            THROW_ZMQ_ERROR_T;
         return timer_id;
     }
 
@@ -2881,21 +2883,21 @@ class timers
     {
         int rc = zmq_timers_cancel(_timers, timer_id);
         if (rc == -1)
-            throw zmq::error_t();
+            THROW_ZMQ_ERROR_T;
     }
 
     void set_interval(id_t timer_id, std::chrono::milliseconds interval)
     {
         int rc = zmq_timers_set_interval(_timers, timer_id, interval.count());
         if (rc == -1)
-            throw zmq::error_t();
+            THROW_ZMQ_ERROR_T;
     }
 
     void reset(id_t timer_id)
     {
         int rc = zmq_timers_reset(_timers, timer_id);
         if (rc == -1)
-            throw zmq::error_t();
+            THROW_ZMQ_ERROR_T;
     }
 
     timeout_result_t timeout() const
@@ -2910,7 +2912,7 @@ class timers
     {
         int rc = zmq_timers_execute(_timers);
         if (rc == -1)
-            throw zmq::error_t();
+            THROW_ZMQ_ERROR_T;
     }
 
   private:
