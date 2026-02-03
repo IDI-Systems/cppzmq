@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 
 list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include (DetectCPPZMQVersion)
 
@@ -25,18 +26,6 @@ if (NOT TARGET libzmq AND NOT TARGET libzmq-static)
     message(FATAL_ERROR "ZeroMQ version not supported!")
   endif()
 endif()
-
-if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    OPTION (ENABLE_DRAFTS "Build and install draft classes and methods" ON)
-else ()
-    OPTION (ENABLE_DRAFTS "Build and install draft classes and methods" OFF)
-endif ()
-if (ENABLE_DRAFTS)
-    ADD_DEFINITIONS (-DZMQ_BUILD_DRAFT_API)
-    set (pkg_config_defines "-DZMQ_BUILD_DRAFT_API=1")
-else (ENABLE_DRAFTS)
-    set (pkg_config_defines "")
-endif (ENABLE_DRAFTS)
 
 message(STATUS "cppzmq v${cppzmq_VERSION}")
 

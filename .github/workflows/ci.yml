@@ -11,65 +11,47 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["ubuntu-latest"]
+        os: ["ubuntu-22.04"]
         cppstd: ["98", "11", "20"]
         cc: ["gcc-10"]
         cxx: ["g++-10"]
         drafts: ["ON"]
-        libzmq: ["4.3.4"]
+        libzmq: ["4.3.5"]
         libzmqbuild: ["cmake"]
         include:
-          # older libzmq and gcc without draft
-          - os: "ubuntu-18.04"
+          # older libzmq and without draft
+          - os: "ubuntu-22.04"
             cppstd: "11"
-            cc: "gcc-7"
-            cxx: "g++-7"
+            cc: "gcc-9"
+            cxx: "g++-9"
             drafts: "OFF"
             libzmq: "4.2.0"
             libzmqbuild: "pkgconfig"
-          # gcc 4.8
-          - os: "ubuntu-18.04"
-            cppstd: "11"
-            cc: "gcc-4.8"
-            cxx: "g++-4.8"
-            drafts: "ON"
-            libzmq: "4.3.4"
-            libzmqbuild: "cmake"
-            aptinstall: "gcc-4.8 g++-4.8"
-          # gcc 5
-          - os: "ubuntu-18.04"
-            cppstd: "11"
-            cc: "gcc-5"
-            cxx: "g++-5"
-            drafts: "ON"
-            libzmq: "4.3.4"
-            libzmqbuild: "cmake"
-            aptinstall: "gcc-5 g++-5"
           # without draft
-          - os: "ubuntu-latest"
-            cppstd: "20"
-            cc: "gcc-10"
-            cxx: "g++-10"
+          - os: "ubuntu-24.04"
+            cppstd: "23"
+            cc: "gcc-13"
+            cxx: "g++-13"
             drafts: "OFF"
-            libzmq: "4.3.4"
+            libzmq: "4.3.5"
             libzmqbuild: "cmake"
           # coverage (gcc version should match gcov version)
-          - os: "ubuntu-latest"
+          - os: "ubuntu-22.04"
             cppstd: "17"
             cc: "gcc-9"
             cxx: "g++-9"
             drafts: "ON"
-            libzmq: "4.3.4"
+            libzmq: "4.3.5"
             libzmqbuild: "cmake"
             coverage: "-DCOVERAGE=ON"
             aptinstall: "lcov"
           # clang
-          - os: "ubuntu-latest"
+          - os: "ubuntu-22.04"
             cppstd: "17"
-            cc: "clang-12"
-            cxx: "clang++-12"
+            cc: "clang-14"
+            cxx: "clang++-14"
             drafts: "ON"
-            libzmq: "4.3.4"
+            libzmq: "4.3.5"
             libzmqbuild: "cmake"
           # macos
           - os: "macos-latest"
@@ -77,24 +59,24 @@ jobs:
             cc: "clang"
             cxx: "clang++"
             drafts: "OFF"
-            libzmq: "4.3.4"
+            libzmq: "4.3.5"
             libzmqbuild: false
             brewinstall: "zeromq"
           # windows
-          - os: "windows-2019"
-            cppstd: "14"
-            cc: "msbuild"
-            cxx: "msbuild"
-            drafts: "ON"
-            libzmq: "4.3.4"
-            libzmqbuild: "cmake"
-            platform: "-Ax64"
-          - os: "windows-latest"
+          #- os: "windows-2019"
+          #  cppstd: "14"
+          #  cc: "msbuild"
+          #  cxx: "msbuild"
+          #  drafts: "ON"
+          #  libzmq: "4.3.5"
+          #  libzmqbuild: "cmake"
+          #  platform: "-Ax64"
+          - os: "windows-2022"
             cppstd: "20"
             cc: "msbuild"
             cxx: "msbuild"
             drafts: "ON"
-            libzmq: "4.3.4"
+            libzmq: "4.3.5"
             libzmqbuild: "cmake"
             platform: "-Ax64"
 
@@ -134,6 +116,12 @@ jobs:
         cmake --build libzmq-build --config ${BUILDTYPE} -j ${THREADS}
         echo "LIBZMQ=${PWD}/libzmq-build" >> ${GITHUB_ENV}
 
+    - name: post_build_libzmq_cmake
+      if: ${{ matrix.libzmqbuild == 'cmake' && startsWith(matrix.os, 'windows') }}
+      run: |
+        mkdir -p build/tests/${BUILDTYPE}
+        cp ${{ env.LIBZMQ }}/bin/${BUILDTYPE}/*.dll build/tests/${BUILDTYPE}
+
     - name: build_libzmq_pkgconfig
       if: ${{ matrix.libzmqbuild == 'pkgconfig' }}
       working-directory: libzmq-${{ matrix.libzmq }}
@@ -150,7 +138,6 @@ jobs:
       run: |
         cmake -H. -Bbuild ${{ matrix.platform}} ${{ matrix.coverage }} \
           -DCMAKE_BUILD_TYPE=${BUILDTYPE} \
-          -DENABLE_DRAFTS=${{ matrix.drafts }} \
           -DCMAKE_CXX_STANDARD=${{ matrix.cppstd }}
         cmake --build build --config ${BUILDTYPE} -j ${THREADS}
         echo "CPPZMQ=${PWD}/build" >> ${GITHUB_ENV}
@@ -164,7 +151,7 @@ jobs:
 
     - name: demo
       # probably need to install libzmq and cppzmq for this to work on windows
-      if: ${{ matrix.os == 'ubuntu*' }}
+      if: ${{ matrix.os == 'ubuntu-24.04' }}
       env:
         CMAKE_PREFIX_PATH: ${{ env.LIBZMQ }}:${{ env.CPPZMQ }}
       run: |
